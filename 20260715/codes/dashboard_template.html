@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plasma miRNA — Transfer &amp; Combined-Cohort AUC Dashboard</title>
+<style>
+:root{--blue:#245f9d;--ink:#172033;--muted:#667085;--border:#d6dce5;--bg:#f7f9fc;--panel:#fff;
+--mad:#245f9d;--cor:#c1440e;--warn:#fff4cc;}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+header{background:#17395f;color:#fff;padding:26px 32px 20px}
+header h1{margin:0 0 4px;font-size:22px}
+header .sub{color:#c5d6ea;font-size:13px}
+.wrap{display:flex}
+nav.toc{position:sticky;top:0;align-self:flex-start;height:100vh;width:210px;background:#fff;border-right:1px solid var(--border);padding:18px 14px;display:flex;flex-direction:column;gap:6px;font-size:13px;overflow:auto}
+nav.toc a{color:var(--blue);text-decoration:none;font-weight:650;padding:6px 8px;border-radius:4px}
+nav.toc a:hover,nav.toc a.active{background:#eef5ff}
+main{flex:1;padding:22px 30px;max-width:1180px}
+section{margin:0 0 40px;scroll-margin-top:14px}
+h2{font-size:19px;margin:0 0 6px;padding-bottom:7px;border-bottom:2px solid var(--blue)}
+.sub{color:var(--muted);font-size:12.5px;margin:4px 0 14px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:14px 0}
+.card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:13px 15px}
+.card .k{color:var(--muted);font-size:12px}
+.card .v{font-size:23px;font-weight:700;margin-top:3px}
+.card .d{color:var(--muted);font-size:11.5px;margin-top:3px}
+.banner{border:1px solid #ecc94b;background:var(--warn);padding:11px 13px;border-radius:6px;font-size:13px;margin:14px 0}
+.controls{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin:12px 0}
+.controls label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+select,input{font-size:12.5px;padding:5px 7px;border:1px solid var(--border);border-radius:4px;background:#fff}
+.plot{width:100%;height:470px;background:#fff;border:1px solid var(--border);border-radius:8px}
+.tablewrap{max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:#fff;margin-top:8px}
+table{border-collapse:collapse;font-size:12.5px;width:100%}
+th,td{border:1px solid var(--border);padding:5px 8px;text-align:left;white-space:nowrap}
+th{background:#eef2f7;position:sticky;top:0;cursor:pointer}
+tbody tr:nth-child(even){background:#fbfcfe}
+.pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600}
+.pill.mad{background:#e8f2ff;color:#164a7a}.pill.cor{background:#fdeee6;color:#9a3610}
+.hint{font-size:11.5px;color:var(--muted);margin-top:6px}
+/* batch-variant explainer cards (hover for the technical detail) */
+.vargrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(218px,1fr));gap:10px;margin:12px 0 16px}
+.varcard{background:#fff;border:1px solid var(--border);border-left-width:4px;border-radius:7px;padding:10px 12px;cursor:help;transition:box-shadow .12s,border-color .12s}
+.varcard:hover{box-shadow:0 2px 8px rgba(36,95,157,.16)}
+.varcard .vn{font-size:13px;font-weight:700}
+.varcard .vd{color:var(--muted);font-size:11.5px;margin-top:4px;line-height:1.45}
+.varcard .vmore{color:var(--blue);font-size:10.5px;margin-top:5px;font-weight:600;opacity:.75}
+</style>
+</head>
+<body>
+<header>
+  <h1>Plasma miRNA — Cross-Cohort Transfer &amp; Combined-Cohort AUC</h1>
+  <div class="sub">EV_RNA (n=300) · NYU-166 · NYU-82 &nbsp;|&nbsp; feature selection: <b>MAD</b> (variance) vs <b>correlation</b> (|corr with recurrence|) &nbsp;|&nbsp; generated __DATE__</div>
+</header>
+<div class="wrap">
+<nav class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#transfer">Transfer summary</a>
+  <a href="#tfheat">Transfer heatmap</a>
+  <a href="#tfvenn">Feature overlap (Venn)</a>
+  <a href="#tfimp">Feature importance</a>
+  <a href="#combined">Combined AUC</a>
+  <a href="#roc">ROC — own-cohort</a>
+  <a href="#roctransfer">ROC — transfer</a>
+  <a href="#explorer">Data explorer</a>
+</nav>
+<main>
+
+<section id="overview">
+  <h2>Overview</h2>
+  <div class="sub">Two analyses, each computed with two feature-selection methods. AUC uses pROC direction="&lt;" throughout.</div>
+  <div class="banner"><b>Method note.</b> <b>Transfer</b> = a GLM refit on the whole source cohort (top-N features) applied to each other cohort — measures generalization across independent cohorts. <b>Combined</b> = the pooled 3-cohort model with 4 batch-handling variants (plain / cov / combat / both), CV-honest ComBat, 100×10 bootstrap; AUC is the mean per-fold AUC. Correlation selection is done <i>inside</i> each training fold (leakage-proof).</div>
+  <div class="cards" id="ovCards"></div>
+  <div class="hint">Key finding: supervised correlation feature-selection overfits — it transfers worse across cohorts and gives lower combined CV-AUC than unsupervised MAD selection.</div>
+</section>
+
+<section id="transfer">
+  <h2>Transfer model summary</h2>
+  <div class="sub">Each source cohort's whole-dataset GLM (top-N features): number of features / non-zero coefficients, honest within-cohort CV (Source_CV_AUC), and transfer AUC applied to each other cohort.</div>
+  <div class="controls">
+    <label>Feature selection
+      <select id="tsFS"><option value="mad">MAD (variance)</option><option value="cor">Correlation</option></select>
+    </label>
+  </div>
+  <div class="tablewrap"><table id="tsTable"></table></div>
+  <div class="hint">Source_CV_AUC = mean per-fold AUC of within-cohort CV (fold-internal feature selection). AUC_&lt;cohort&gt; = model applied to that other cohort; the source's own column is blank.</div>
+</section>
+
+<section id="tfheat">
+  <h2>Transfer AUC heatmap — one cohort → another</h2>
+  <div class="sub">Rows = source→target, columns = feature cutoff. Cells confined to a square grid.</div>
+  <div class="controls">
+    <label>Feature selection
+      <select id="tfFS"><option value="mad">MAD (variance)</option><option value="cor">Correlation</option><option value="both">Compare MAD vs corr (line view)</option></select>
+    </label>
+  </div>
+  <div id="tfPlot" class="plot"></div>
+  <div class="hint">Diagonal (source=target) is omitted — see the summary table above for each source's own-cohort CV.</div>
+</section>
+
+<section id="tfvenn">
+  <h2>Feature overlap across the 3 cohort models (Venn)</h2>
+  <div class="sub">The top-N selected features of each cohort's transfer model at a given cutoff, and how much they overlap. Robust biomarkers sit in the centre (all 3).</div>
+  <div class="controls">
+    <label>Feature selection <select id="vnFS"><option value="mad">MAD</option><option value="cor">Correlation</option></select></label>
+    <label>Feature cutoff <select id="vnVc"></select></label>
+  </div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+    <div>
+      <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:3px">counts (miRNAs)</div>
+      <div id="vnSvg" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+    </div>
+    <div>
+      <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:3px">percent of union</div>
+      <div id="vnSvgPct" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+    </div>
+    <div class="tablewrap" style="flex:1;min-width:240px;max-height:360px"><table id="vnTable"></table></div>
+  </div>
+  <div class="hint">Set sizes equal the cutoff (top-N by MAD or |corr|); overlaps show shared miRNAs. All-3 (centre) miRNAs are the cross-cohort consensus. Percentages are each region as a share of the union of all three selected sets (sums to 100%).</div>
+</section>
+
+<section id="tfimp">
+  <h2>Consensus feature importance</h2>
+  <div class="sub">For the miRNAs shared by all three cohort models at a cutoff, the |coefficient| in each cohort's GLM (one bar group per feature, ranked by mean |coef|).</div>
+  <div class="controls">
+    <label>Feature selection <select id="impFS"><option value="mad">MAD</option><option value="cor">Correlation</option></select></label>
+    <label>Feature cutoff <select id="impVc"></select></label>
+  </div>
+  <div id="impPlot" class="plot"></div>
+  <div class="hint">Empty = no miRNA is shared by all three cohort models at that cutoff (common at very small N). Try v20/v50.</div>
+</section>
+
+<section id="combined">
+  <h2>Combined-cohort AUC — 4 batch-handling variants</h2>
+  <div class="sub">Pooled 3-cohort model, mean per-fold AUC ± 95% CI vs feature cutoff. Compare batch variants, learners, and the two FS methods.</div>
+  <div class="vargrid" id="varCards"></div>
+  <div class="hint" style="margin:-8px 0 10px">All four pool the same 300 + 166 + 82 samples and differ <b>only</b> in how cohort/batch is handled. Hover a card for the technical detail.</div>
+  <div class="controls">
+    <label>Learner <select id="cbLearner"><option>GLM</option><option>RF</option><option>XGB</option></select></label>
+    <label>Feature selection
+      <select id="cbFS"><option value="mad">MAD</option><option value="cor">Correlation</option><option value="both">Compare MAD vs corr</option></select>
+    </label>
+    <label>Show CI band <select id="cbCI"><option value="yes">yes</option><option value="no">no</option></select></label>
+  </div>
+  <div id="cbPlot" class="plot"></div>
+</section>
+
+<section id="roc">
+  <h2>ROC curves — own-cohort</h2>
+  <div class="sub">Each cohort's within-cohort 10-fold CV (fold-internal feature selection, pooled out-of-fold predictions, direction="&lt;"). Pick a dataset × FS method; each plot overlays the ROC at every top-var cutoff.</div>
+  <div class="controls">
+    <label>Dataset × feature selection
+      <select id="ownConfig" style="min-width:260px"></select>
+    </label>
+  </div>
+  <div id="ownPlot" class="plot" style="height:500px"></div>
+</section>
+
+<section id="roctransfer">
+  <h2>ROC curves — transfer (source → target)</h2>
+  <div class="sub">A GLM refit on the whole source cohort applied to another cohort; this is that transfer's actual prediction ROC (direction="&lt;"). Each plot overlays every top-var cutoff; curves below the diagonal (AUC&lt;0.5) are anti-predictive transfers.</div>
+  <div class="controls">
+    <label>Transfer × feature selection
+      <select id="tfrConfig" style="min-width:280px"></select>
+    </label>
+  </div>
+  <div id="tfrPlot" class="plot" style="height:500px"></div>
+</section>
+
+<section id="explorer">
+  <h2>Data explorer</h2>
+  <div class="sub">All AUC rows across both analyses and both FS methods. Click a header to sort.</div>
+  <div class="controls">
+    <label>Analysis <select id="exAnalysis"><option value="all">all</option><option value="transfer">transfer</option><option value="combined">combined</option></select></label>
+    <label>FS <select id="exFS"><option value="all">all</option><option value="mad">mad</option><option value="cor">cor</option></select></label>
+    <button id="exDownload">Download CSV</button>
+  </div>
+  <div class="tablewrap"><table id="exTable"></table></div>
+</section>
+
+</main>
+</div>
+
+<script>__PLOTLY_JS__</script>
+<script>
+const COMBINED_AUC = __COMBINED_AUC__;
+const COMBINED_ROC = __COMBINED_ROC__;
+const TRANSFER_AUC = __TRANSFER_AUC__;
+const TRANSFER_ROC = __TRANSFER_ROC__;
+const TRANSFER_SUMMARY = __TRANSFER_SUMMARY__;
+const TRANSFER_FEAT = __TRANSFER_FEAT__;
+const OWN_ROC = __OWN_ROC__;
+const META = __META__;
+
+const VARCUTS=[5,10,20,50,100,200,500,1000];
+const VARIANTS=["plain","cov","combat","both"];
+const VARCOL={plain:"#8896a5",cov:"#3a7ca5",combat:"#c1440e",both:"#2a9d5c"};
+const FSNAME={mad:"MAD",cor:"correlation"};
+const PLOT_CFG={responsive:true,displayModeBar:false};
+const parseVec=s=>String(s).split("|").map(Number);
+// ordinal colour scale for the top-var cutoffs (small=blue … large=red)
+const VCCOL={5:"#4575b4",10:"#74add1",20:"#8bb9d8",50:"#66bd63",100:"#fdae61",200:"#f46d43",500:"#d73027",1000:"#a50026"};
+
+/* ---------- overview cards ---------- */
+function bestOf(rows,val){let b=null;rows.forEach(r=>{if(b===null||r[val]>b[val])b=r;});return b;}
+(function(){
+  const cards=[];
+  ["mad","cor"].forEach(fs=>{
+    const ob=bestOf(OWN_ROC.filter(r=>r.fs_method===fs),"auc");
+    if(ob) cards.push({k:`Best own-cohort AUC · ${FSNAME[fs]}`,v:ob.auc.toFixed(3),
+      d:`${pretty(ob.cohort)} · v${ob.varcut}`});
+  });
+  ["mad","cor"].forEach(fs=>{
+    const cb=bestOf(COMBINED_AUC.filter(r=>r.fs_method===fs),"mean");
+    cards.push({k:`Best combined AUC · ${FSNAME[fs]}`,v:cb.mean.toFixed(3),
+      d:`${cb.learner} · ${cb.variant} · v${cb.varcut}`});
+  });
+  ["mad","cor"].forEach(fs=>{
+    const tb=bestOf(TRANSFER_AUC.filter(r=>r.fs_method===fs),"auc");
+    cards.push({k:`Best transfer AUC · ${FSNAME[fs]}`,v:tb.auc.toFixed(3),
+      d:`${pretty(tb.source)}→${pretty(tb.target)} · v${tb.varcut}`});
+  });
+  document.getElementById("ovCards").innerHTML=cards.map(c=>
+    `<div class="card"><div class="k">${c.k}</div><div class="v">${c.v}</div><div class="d">${c.d}</div></div>`).join("");
+})();
+
+/* ---------- transfer summary table ---------- */
+const SOURCES=["EV_RNA","nyu_166","nyu_82"];
+function drawTsTable(){
+  const fs=document.getElementById("tsFS").value;
+  const rows=TRANSFER_SUMMARY.filter(r=>r.fs_method===fs);
+  const cols=["Version","Source","N_Features","N_Nonzero","Source_CV_AUC","AUC_nyu_166","AUC_nyu_82","AUC_EV_RNA"];
+  const hdr=cols.map(c=>`<th>${c.replace("Version","cutoff")}</th>`).join("");
+  const body=rows.map(r=>`<tr>${cols.map(c=>{let v=r[c];
+    if(v===null||v===undefined||v==="NA")return "<td style='color:#bbb'>–</td>";
+    if(c.includes("AUC")||c.includes("CV"))return `<td>${Number(v).toFixed(3)}</td>`;
+    return `<td>${v}</td>`;}).join("")}</tr>`).join("");
+  document.getElementById("tsTable").innerHTML=`<thead><tr>${hdr}</tr></thead><tbody>${body}</tbody>`;
+}
+
+/* ---------- feature-set helpers (Venn + importance) ---------- */
+function featSets(fs,vc){ // -> {cohort: Set(features)}, coef map
+  const o={},cf={};
+  SOURCES.forEach(c=>{o[c]=new Set();cf[c]={};});
+  TRANSFER_FEAT.forEach(r=>{if(r.fs_method===fs&&r.varcut===vc){o[r.cohort].add(r.feature);cf[r.cohort][r.feature]=r.coef;}});
+  return {sets:o,coef:cf};
+}
+function pretty(c){return {EV_RNA:"EV_RNA",nyu_166:"NYU 166",nyu_82:"NYU 82"}[c];}
+
+/* ---------- Venn (3-circle SVG), rendered as counts and as % of union ---------- */
+function vennSVG(r,fmt){
+  const col=["#245f9d","#c1440e","#2a9d5c"];
+  return `<svg width="360" height="320" viewBox="0 0 360 320" font-family="sans-serif">
+    <circle cx="140" cy="130" r="95" fill="${col[0]}22" stroke="${col[0]}" stroke-width="2"/>
+    <circle cx="220" cy="130" r="95" fill="${col[1]}22" stroke="${col[1]}" stroke-width="2"/>
+    <circle cx="180" cy="200" r="95" fill="${col[2]}22" stroke="${col[2]}" stroke-width="2"/>
+    <text x="95" y="105" font-size="15" font-weight="700" fill="#333">${fmt(r.A)}</text>
+    <text x="255" y="105" font-size="15" font-weight="700" fill="#333" text-anchor="end">${fmt(r.B)}</text>
+    <text x="175" y="245" font-size="15" font-weight="700" fill="#333" text-anchor="middle">${fmt(r.C)}</text>
+    <text x="180" y="100" font-size="13" text-anchor="middle" fill="#333">${fmt(r.AB)}</text>
+    <text x="128" y="185" font-size="13" text-anchor="middle" fill="#333">${fmt(r.AC)}</text>
+    <text x="232" y="185" font-size="13" text-anchor="middle" fill="#333">${fmt(r.BC)}</text>
+    <text x="180" y="150" font-size="16" font-weight="800" text-anchor="middle" fill="#111">${fmt(r.ABC)}</text>
+    <text x="70" y="30" font-size="13" font-weight="700" fill="${col[0]}">${pretty(SOURCES[0])}</text>
+    <text x="240" y="30" font-size="13" font-weight="700" fill="${col[1]}">${pretty(SOURCES[1])}</text>
+    <text x="150" y="312" font-size="13" font-weight="700" fill="${col[2]}">${pretty(SOURCES[2])}</text>
+  </svg>`;
+}
+function drawVenn(){
+  const fs=document.getElementById("vnFS").value, vc=+document.getElementById("vnVc").value;
+  const {sets}=featSets(fs,vc);
+  const [A,B,C]=SOURCES.map(c=>sets[c]);
+  const inA=x=>A.has(x),inB=x=>B.has(x),inC=x=>C.has(x);
+  const all=[...new Set([...A,...B,...C])];
+  const only=(p)=>all.filter(p).length;
+  const r={
+    A:only(x=>inA(x)&&!inB(x)&&!inC(x)), B:only(x=>!inA(x)&&inB(x)&&!inC(x)), C:only(x=>!inA(x)&&!inB(x)&&inC(x)),
+    AB:only(x=>inA(x)&&inB(x)&&!inC(x)), AC:only(x=>inA(x)&&!inB(x)&&inC(x)), BC:only(x=>!inA(x)&&inB(x)&&inC(x)),
+    ABC:only(x=>inA(x)&&inB(x)&&inC(x))};
+  const tot=all.length||1;                              // union size
+  const pct=v=>v?(100*v/tot).toFixed(0)+"%":"0%";
+  document.getElementById("vnSvg").innerHTML=vennSVG(r,v=>v);
+  document.getElementById("vnSvgPct").innerHTML=vennSVG(r,pct);
+  // consensus (all-3) feature list table
+  const cons=all.filter(x=>inA(x)&&inB(x)&&inC(x)).sort();
+  document.getElementById("vnTable").innerHTML=
+    `<thead><tr><th>shared by all 3 (${cons.length} / ${tot} union)</th></tr></thead><tbody>`+
+    (cons.length?cons.map(f=>`<tr><td>${f}</td></tr>`).join(""):`<tr><td style="color:#999">none at v${vc}</td></tr>`)+`</tbody>`;
+}
+
+/* ---------- consensus feature importance (grouped bars) ---------- */
+function drawImp(){
+  const fs=document.getElementById("impFS").value, vc=+document.getElementById("impVc").value;
+  const {sets,coef}=featSets(fs,vc);
+  const [A,B,C]=SOURCES.map(c=>sets[c]);
+  const cons=[...A].filter(x=>B.has(x)&&C.has(x));
+  const el=document.getElementById("impPlot");
+  if(!cons.length){Plotly.purge(el);el.innerHTML=`<div style="padding:30px;color:#999;font-size:13px">No miRNA is shared by all three cohort models at v${vc}. Try a larger cutoff (v20/v50).</div>`;el.dataset.msg="1";return;}
+  // only clear when the div currently holds the plain-text message; wiping innerHTML on a
+  // live Plotly div leaves its internal state attached and makes react() render nothing.
+  if(el.dataset.msg==="1"){el.innerHTML="";delete el.dataset.msg;}
+  const scored=cons.map(f=>({f,mean:(Math.abs(coef.EV_RNA[f])+Math.abs(coef.nyu_166[f])+Math.abs(coef.nyu_82[f]))/3}))
+    .sort((a,b)=>b.mean-a.mean).slice(0,20);
+  const feats=scored.map(s=>s.f);
+  const col={EV_RNA:"#245f9d",nyu_166:"#c1440e",nyu_82:"#2a9d5c"};
+  const traces=SOURCES.map(c=>({x:feats.map(f=>Math.abs(coef[c][f])),y:feats,name:pretty(c),type:"bar",orientation:"h",marker:{color:col[c]}}));
+  Plotly.react(el,traces,{barmode:"group",margin:{t:10,r:10,b:45,l:150},
+    xaxis:{title:"|coefficient|"},yaxis:{autorange:"reversed",automargin:true},
+    legend:{orientation:"h",y:1.08},height:Math.max(320,feats.length*26)},PLOT_CFG);
+}
+
+/* ---------- transfer plot ---------- */
+function pairKey(r){return `${r.source}→${r.target}`;}
+function drawTransfer(){
+  const fs=document.getElementById("tfFS").value;
+  const el=document.getElementById("tfPlot");
+  if(fs==="both"){
+    // line view: AUC vs varcut, one line per source→target, MAD solid / cor dashed
+    const pairs=[...new Set(TRANSFER_AUC.map(pairKey))];
+    const traces=[];
+    pairs.forEach((pk,i)=>{
+      ["mad","cor"].forEach(m=>{
+        const rows=TRANSFER_AUC.filter(r=>pairKey(r)===pk&&r.fs_method===m).sort((a,b)=>a.varcut-b.varcut);
+        traces.push({x:rows.map(r=>r.varcut),y:rows.map(r=>r.auc),name:`${pk} · ${FSNAME[m]}`,
+          mode:"lines+markers",line:{dash:m==="cor"?"dash":"solid",width:2},
+          legendgroup:pk,marker:{size:5}});
+      });
+    });
+    Plotly.react(el,traces,{margin:{t:10,r:10,b:50,l:50},xaxis:{title:"feature cutoff",type:"log",tickvals:VARCUTS,ticktext:VARCUTS.map(String)},
+      yaxis:{title:"transfer AUC",range:[0.2,1],zeroline:false},shapes:[{type:"line",x0:5,x1:1000,y0:.5,y1:.5,line:{color:"#bbb",dash:"dot",width:1}}],
+      legend:{font:{size:10}}},PLOT_CFG);
+    return;
+  }
+  const pairs=[...new Set(TRANSFER_AUC.map(pairKey))];
+  const prettyPair=pk=>{const [s,t]=pk.split("→");return `${pretty(s)} → ${pretty(t)}`;};
+  const ylabs=pairs.map(prettyPair);
+  const z=pairs.map(pk=>VARCUTS.map(vc=>{
+    const r=TRANSFER_AUC.find(x=>pairKey(x)===pk&&x.varcut===vc&&x.fs_method===fs);return r?r.auc:null;}));
+  // confine cells to a near-square grid instead of stretching across full width:
+  // fix per-cell pixel size and size the plot to fit exactly n_cols x n_rows cells.
+  // LM sized to fit the longest source→target label so the y ticks aren't clipped.
+  const CELL=54, LM=168, RM=95, TM=12, BM=46;
+  const W=LM+RM+VARCUTS.length*CELL, H=TM+BM+pairs.length*CELL;
+  Plotly.react(el,[{z,x:VARCUTS.map(String),y:ylabs,type:"heatmap",colorscale:"RdYlGn",zmin:0.3,zmax:0.9,
+    xgap:3,ygap:3,colorbar:{title:"AUC",thickness:14,len:0.9},
+    text:z.map(r=>r.map(v=>v==null?"":v.toFixed(2))),texttemplate:"%{text}",textfont:{size:11},
+    hovertemplate:"%{y} · v%{x}<br>AUC %{z:.3f}<extra></extra>"}],
+    {width:W,height:H,margin:{t:TM,r:RM,b:BM,l:LM},autosize:false,
+     xaxis:{title:"feature cutoff",side:"bottom",type:"category",fixedrange:true},
+     yaxis:{autorange:"reversed",type:"category",fixedrange:true},
+     title:{text:`${FSNAME[fs]} selection`,font:{size:13},x:0,xanchor:"left"},plot_bgcolor:"#eef2f7"},
+    {responsive:false,displayModeBar:false});
+}
+
+/* ---------- batch-variant explainer cards ---------- */
+const VARDESC={
+  plain:{t:"Pool the 3 cohorts and model them as one dataset. No batch handling at all — the naive baseline.",
+    h:"Raw pooled feature matrix: no correction applied and no cohort covariates added. Whatever systematic differences exist between the cohorts stay in the data, so the model may key on cohort rather than recurrence."},
+  cov:{t:"Leave the miRNA values alone, but add cohort indicator columns so the model can absorb per-cohort shifts.",
+    h:"Two indicator columns (batch_nyu_166, batch_nyu_82; EV_RNA is the reference) are appended and left UNPENALIZED (penalty.factor = 0) so the elastic net cannot shrink them away. Captures per-cohort intercept shifts only — the miRNA values themselves are untouched."},
+  combat:{t:"Batch-correct the miRNA values themselves, fitted inside each training fold so nothing leaks.",
+    h:"limma removeBatchEffect-style correction: OLS on a recurrence-protected design (recurrence is in the design, so its signal is NOT subtracted), removing only the batch-coefficient contribution. Fit on the training fold's samples and labels; the held-out fold is corrected using its cohort membership alone, so no validation labels enter the correction. This fold-internal fit is the leakage fix that defines fork3."},
+  both:{t:"combat + cov together: corrected miRNA values AND cohort indicator columns.",
+    h:"Fold-internal batch correction of the feature matrix plus the two unpenalized cohort indicator covariates — belt and braces."}
+};
+(function(){
+  document.getElementById("varCards").innerHTML=VARIANTS.map(v=>
+    `<div class="varcard" style="border-left-color:${VARCOL[v]}" title="${VARDESC[v].h}">
+       <div class="vn" style="color:${VARCOL[v]}">${v}</div>
+       <div class="vd">${VARDESC[v].t}</div>
+       <div class="vmore">hover for detail ▸</div>
+     </div>`).join("");
+})();
+
+/* ---------- combined plot ---------- */
+function drawCombined(){
+  const le=document.getElementById("cbLearner").value;
+  const fsSel=document.getElementById("cbFS").value;
+  const ci=document.getElementById("cbCI").value==="yes";
+  const el=document.getElementById("cbPlot");
+  const methods=fsSel==="both"?["mad","cor"]:[fsSel];
+  const traces=[];
+  VARIANTS.forEach(va=>{
+    methods.forEach(m=>{
+      const rows=COMBINED_AUC.filter(r=>r.learner===le&&r.variant===va&&r.fs_method===m).sort((a,b)=>a.varcut-b.varcut);
+      if(!rows.length)return;
+      const dash=m==="cor"?"dash":"solid";
+      const nm=fsSel==="both"?`${va} · ${FSNAME[m]}`:va;
+      if(ci){
+        traces.push({x:rows.map(r=>r.varcut).concat(rows.map(r=>r.varcut).reverse()),
+          y:rows.map(r=>r.hi).concat(rows.map(r=>r.lo).reverse()),fill:"toself",fillcolor:hexA(VARCOL[va],m==="cor"?0.06:0.12),
+          line:{width:0},hoverinfo:"skip",showlegend:false,legendgroup:nm});
+      }
+      traces.push({x:rows.map(r=>r.varcut),y:rows.map(r=>r.mean),name:nm,mode:"lines+markers",
+        line:{color:VARCOL[va],dash,width:2},marker:{size:5},legendgroup:nm,
+        hovertemplate:`${nm}<br>v%{x} · AUC %{y:.3f}<extra></extra>`});
+    });
+  });
+  Plotly.react(el,traces,{margin:{t:10,r:10,b:50,l:50},
+    xaxis:{title:"feature cutoff",type:"log",tickvals:VARCUTS,ticktext:VARCUTS.map(String)},
+    yaxis:{title:"mean CV AUC",range:[0.6,0.88],zeroline:false},legend:{font:{size:11}}},PLOT_CFG);
+}
+function hexA(h,a){const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;}
+
+/* ---------- ROC panels (own-cohort + transfer): one option per dataset×FS-method,
+   each plot overlaying the ROC curve at every top-var cutoff ---------- */
+function rocMulti(elId,rows){
+  rows=rows.slice().sort((a,b)=>a.varcut-b.varcut);
+  const traces=[{x:[0,1],y:[0,1],mode:"lines",line:{color:"#ccc",dash:"dot",width:1},showlegend:false,hoverinfo:"skip"}];
+  rows.forEach(r=>{if(!r.fpr)return;
+    traces.push({x:parseVec(r.fpr),y:parseVec(r.tpr),mode:"lines",
+      name:`v${r.varcut} (AUC ${r.auc.toFixed(2)})`,line:{width:2,color:VCCOL[r.varcut]},
+      hovertemplate:`top-var v${r.varcut}<br>AUC ${r.auc.toFixed(3)}<extra></extra>`});});
+  Plotly.react(document.getElementById(elId),traces,{margin:{t:10,r:10,b:50,l:50},
+    xaxis:{title:"False positive rate",range:[0,1]},yaxis:{title:"True positive rate",range:[0,1]},
+    legend:{font:{size:11},title:{text:"top-var cutoff"}}},PLOT_CFG);
+}
+// own-cohort: 6 options = 3 datasets × {MAD, correlation}
+function ownConfigs(){
+  const sel=document.getElementById("ownConfig");
+  if(!OWN_ROC.length){sel.innerHTML=`<option>generating…</option>`;
+    document.getElementById("ownPlot").innerHTML=`<div style="padding:34px;color:#999;font-size:13px">Own-cohort ROC curves are still being generated (within-cohort CV). They will appear on the next rebuild.</div>`;return;}
+  const opts=[];
+  ["mad","cor"].forEach(fs=>SOURCES.forEach(co=>opts.push({v:`${fs}|${co}`,label:`${FSNAME[fs]} · ${pretty(co)}`})));
+  sel.innerHTML=opts.map(o=>`<option value="${o.v}">${o.label}</option>`).join("");
+  sel.value="mad|EV_RNA"; drawOwn();
+}
+function drawOwn(){
+  if(!OWN_ROC.length)return;
+  const [fs,co]=document.getElementById("ownConfig").value.split("|");
+  rocMulti("ownPlot",OWN_ROC.filter(r=>r.fs_method===fs&&r.cohort===co));
+}
+// transfer: source→target pairs × {MAD, correlation}
+function tfrConfigs(){
+  const sel=document.getElementById("tfrConfig");
+  const pairs=[...new Set(TRANSFER_ROC.map(r=>`${r.source}|${r.target}`))];
+  const opts=[];
+  ["mad","cor"].forEach(fs=>pairs.forEach(p=>{const [s,t]=p.split("|");
+    opts.push({v:`${fs}|${p}`,label:`${FSNAME[fs]} · ${pretty(s)}→${pretty(t)}`});}));
+  sel.innerHTML=opts.map(o=>`<option value="${o.v}">${o.label}</option>`).join("");
+  sel.value="mad|EV_RNA|nyu_82"; drawTfr();
+}
+function drawTfr(){
+  const [fs,s,t]=document.getElementById("tfrConfig").value.split("|");
+  rocMulti("tfrPlot",TRANSFER_ROC.filter(r=>r.fs_method===fs&&r.source===s&&r.target===t));
+}
+
+/* ---------- explorer table ---------- */
+let exSort={col:null,dir:1};
+function exRows(){
+  const an=document.getElementById("exAnalysis").value, fs=document.getElementById("exFS").value;
+  let rows=[];
+  if(an!=="combined") TRANSFER_AUC.forEach(r=>rows.push({analysis:"transfer",fs_method:r.fs_method,config:`${r.source}→${r.target}`,learner:"GLM",varcut:r.varcut,auc:r.auc}));
+  if(an!=="transfer") COMBINED_AUC.forEach(r=>rows.push({analysis:"combined",fs_method:r.fs_method,config:r.variant,learner:r.learner,varcut:r.varcut,auc:r.mean}));
+  if(fs!=="all") rows=rows.filter(r=>r.fs_method===fs);
+  if(exSort.col) rows.sort((a,b)=>(a[exSort.col]>b[exSort.col]?1:-1)*exSort.dir);
+  return rows;
+}
+function drawTable(){
+  const rows=exRows();const cols=["analysis","fs_method","config","learner","varcut","auc"];
+  const th=cols.map(c=>`<th data-c="${c}">${c}</th>`).join("");
+  const body=rows.map(r=>`<tr>${cols.map(c=>`<td>${c==="auc"?r[c].toFixed(3):(c==="fs_method"?`<span class="pill ${r[c]}">${r[c]}</span>`:r[c])}</td>`).join("")}</tr>`).join("");
+  const t=document.getElementById("exTable");t.innerHTML=`<thead><tr>${th}</tr></thead><tbody>${body}</tbody>`;
+  t.querySelectorAll("th").forEach(h=>h.onclick=()=>{const c=h.dataset.c;exSort.dir=(exSort.col===c?-exSort.dir:1);exSort.col=c;drawTable();});
+}
+document.getElementById("exDownload").onclick=()=>{
+  const rows=exRows();const cols=["analysis","fs_method","config","learner","varcut","auc"];
+  const csv=[cols.join(",")].concat(rows.map(r=>cols.map(c=>c==="auc"?r[c].toFixed(4):r[c]).join(","))).join("\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="mirna_auc_explorer.csv";a.click();
+};
+
+/* ---------- wire up ---------- */
+// populate varcut dropdowns for venn + importance
+["vnVc","impVc"].forEach(id=>{const s=document.getElementById(id);
+  s.innerHTML=VARCUTS.map(v=>`<option value="${v}"${v===20?" selected":""}>v${v}</option>`).join("");});
+document.getElementById("tsFS").onchange=drawTsTable;
+document.getElementById("tfFS").onchange=drawTransfer;
+["vnFS","vnVc"].forEach(id=>document.getElementById(id).onchange=drawVenn);
+["impFS","impVc"].forEach(id=>document.getElementById(id).onchange=drawImp);
+["cbLearner","cbFS","cbCI"].forEach(id=>document.getElementById(id).onchange=drawCombined);
+document.getElementById("ownConfig").onchange=drawOwn;
+document.getElementById("tfrConfig").onchange=drawTfr;
+["exAnalysis","exFS"].forEach(id=>document.getElementById(id).onchange=drawTable);
+drawTsTable();drawTransfer();drawVenn();drawImp();drawCombined();ownConfigs();tfrConfigs();drawTable();
+
+/* toc active state */
+const links=[...document.querySelectorAll("nav.toc a")];
+const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting)links.forEach(l=>l.classList.toggle("active",l.getAttribute("href")==="#"+e.target.id));}),{rootMargin:"-20% 0px -70% 0px"});
+document.querySelectorAll("section").forEach(s=>obs.observe(s));
+</script>
+</body>
+</html>

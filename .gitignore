@@ -1,0 +1,11 @@
+*.RDS
+*.rds
+*.csv
+*.xlsx
+*.pdf
+*.png
+*.zip
+*.log
+.DS_Store
+.Rhistory
+plotly-*.min.js
